@@ -21,6 +21,12 @@ class GameState(Enum):
     GAME_OVER = "game_over"
 
 
+class Difficulty(Enum):
+    EASY = "easy"
+    NORMAL = "normal"
+    HARD = "hard"
+
+
 class PowerUpType(Enum):
     HEALTH = "health"
     SPEED = "speed"
@@ -34,26 +40,11 @@ class Explosion(arcade.Sprite):
         self.textures = []
         # Разные цвета взрывов для разных типов врагов
         if enemy_type == "fast":
-            # Ярко-зеленые взрывы для быстрых врагов
-            colors = [
-                (0, 255, 0),  # Ярко-зеленый
-                (144, 238, 144),  # Светло-зеленый
-                (255, 255, 255)  # Белый
-            ]
+            colors = [(0, 255, 0), (144, 238, 144), (255, 255, 255)]
         elif enemy_type == "heavy":
-            # Фиолетовые взрывы для тяжелых врагов
-            colors = [
-                (128, 0, 128),  # Пурпурный
-                (216, 191, 216),  # Бледно-фиолетовый
-                (255, 255, 255)  # Белый
-            ]
+            colors = [(128, 0, 128), (216, 191, 216), (255, 255, 255)]
         else:
-            # Оранжевые взрывы для обычных врагов
-            colors = [
-                (255, 165, 0),  # Оранжевый
-                (255, 215, 0),  # Золотой
-                (255, 255, 255)  # Белый
-            ]
+            colors = [(255, 165, 0), (255, 215, 0), (255, 255, 255)]
 
         for i in range(5):
             radius = 15 + i * 5
@@ -123,8 +114,13 @@ class Bullet(arcade.SpriteCircle):
     def update(self, delta_time=1 / 60):
         self.center_x += self.change_x
         self.center_y += self.change_y
-        if (self.center_x < 0 or self.center_x > SCREEN_WIDTH or
-                self.center_y < 0 or self.center_y > SCREEN_HEIGHT):
+
+        # Безопасная проверка границ с учетом радиуса пули
+        bullet_radius = self.width / 2
+        if (self.center_x < -bullet_radius or
+                self.center_x > SCREEN_WIDTH + bullet_radius or
+                self.center_y < -bullet_radius or
+                self.center_y > SCREEN_HEIGHT + bullet_radius):
             self.remove_from_sprite_lists()
 
 
@@ -143,16 +139,13 @@ class Tank(arcade.Sprite):
         self.load_directional_textures()
 
     def load_directional_textures(self):
-        """Загружаем текстуры для разных направлений"""
-        # Это заглушка, переопределим в дочерних классах
-        pass
-
-    def update_direction_texture(self):
-        """Обновляем текстуру в зависимости от направления"""
         if self.direction in self.textures_by_direction:
             self.texture = self.textures_by_direction[self.direction]
 
-        # Поворачиваем спрайт в зависимости от направления
+    def update_direction_texture(self):
+        if self.direction in self.textures_by_direction:
+            self.texture = self.textures_by_direction[self.direction]
+
         if self.direction == "UP":
             self.angle = 0
         elif self.direction == "RIGHT":
@@ -176,7 +169,6 @@ class Tank(arcade.Sprite):
         self.update_direction_texture()
 
     def check_obstacle_collision(self, new_x, new_y, obstacle_list):
-        """Проверка столкновения с препятствиями"""
         old_x = self.center_x
         old_y = self.center_y
         self.center_x = new_x
@@ -187,13 +179,11 @@ class Tank(arcade.Sprite):
         return collision
 
     def move_with_collision(self, dx, dy, obstacle_list):
-        """Движение с проверкой столкновений"""
         # Проверяем по X
         new_x = self.center_x + dx
         if not self.check_obstacle_collision(new_x, self.center_y, obstacle_list):
             self.center_x = new_x
         else:
-            # Пробуем двигаться на меньшее расстояние
             step = 1 if dx > 0 else -1
             for i in range(1, int(abs(dx)) + 1):
                 test_x = self.center_x + step
@@ -207,7 +197,6 @@ class Tank(arcade.Sprite):
         if not self.check_obstacle_collision(self.center_x, new_y, obstacle_list):
             self.center_y = new_y
         else:
-            # Пробуем двигаться на меньшее расстояние
             step = 1 if dy > 0 else -1
             for i in range(1, int(abs(dy)) + 1):
                 test_y = self.center_y + step
@@ -263,21 +252,23 @@ class Tank(arcade.Sprite):
 
 
 class PlayerTank(Tank):
-    def __init__(self):
-        # Используем спрайт для игрока
+    def __init__(self, difficulty=Difficulty.NORMAL):
         sprite_path = os.path.join("images", "player_tank.png")
+
+        # Настройки здоровья в зависимости от сложности
+        if difficulty == Difficulty.EASY:
+            health = 10
+        elif difficulty == Difficulty.NORMAL:
+            health = 5
+        else:  # HARD
+            health = 3
+
         if os.path.exists(sprite_path):
-            super().__init__(sprite_path, scale=0.5, health=5)
+            super().__init__(sprite_path, scale=0.5, health=health)
         else:
-            # Если файла нет, создаем временный спрайт
-            super().__init__(None, scale=1.0, health=5)
+            super().__init__(None, scale=1.0, health=health)
             self.texture = arcade.make_soft_square_texture(40, (0, 255, 255), 255, 255)
-            self.textures_by_direction = {
-                "UP": self.texture,
-                "DOWN": self.texture,
-                "LEFT": self.texture,
-                "RIGHT": self.texture
-            }
+
         self.textures_by_direction = {
             "UP": self.texture,
             "DOWN": self.texture,
@@ -310,16 +301,15 @@ class EnemyTank(Tank):
         if os.path.exists(sprite_path):
             super().__init__(sprite_path, scale=scale, health=health)
         else:
-            # Если файла нет, создаем временные спрайты
             super().__init__(None, scale=1.0, health=health)
             if enemy_type == "normal":
-                color = (255, 140, 0)  # Темно-оранжевый
+                color = (255, 140, 0)
                 size = 40
             elif enemy_type == "fast":
-                color = (50, 205, 50)  # Салатовый
+                color = (50, 205, 50)
                 size = 35
             else:  # heavy
-                color = (138, 43, 226)  # Фиолетовый
+                color = (138, 43, 226)
                 size = 50
             self.texture = arcade.make_soft_square_texture(size, color, 255, 255)
 
@@ -378,15 +368,14 @@ class EnemyTank(Tank):
             else:
                 self.direction = "UP" if dy_to_player > 0 else "DOWN"
 
-            # Определяем цвет пуль в зависимости от типа врага
             if self.enemy_type == "normal":
-                bullet_color = (255, 140, 0)  # Оранжевый
+                bullet_color = (255, 140, 0)
                 bullet_size = 8
             elif self.enemy_type == "fast":
-                bullet_color = (0, 255, 0)  # Зеленый
+                bullet_color = (0, 255, 0)
                 bullet_size = 6
             else:  # heavy
-                bullet_color = (255, 0, 255)  # Фиолетовый
+                bullet_color = (255, 0, 255)
                 bullet_size = 12
 
             super().shoot(self.enemy_bullet_list, bullet_color, bullet_size)
@@ -405,10 +394,10 @@ class PowerUp(arcade.SpriteCircle):
     def __init__(self, powerup_type):
         self.type = powerup_type
         colors = {
-            PowerUpType.HEALTH: arcade.color.LIME_GREEN,  # Ярко-зеленый
-            PowerUpType.SPEED: arcade.color.SKY_BLUE,  # Небесно-голубой
-            PowerUpType.DAMAGE: arcade.color.RED_ORANGE,  # Красно-оранжевый
-            PowerUpType.RAPID_FIRE: arcade.color.GOLD  # Золотой
+            PowerUpType.HEALTH: arcade.color.LIME_GREEN,
+            PowerUpType.SPEED: arcade.color.SKY_BLUE,
+            PowerUpType.DAMAGE: arcade.color.RED_ORANGE,
+            PowerUpType.RAPID_FIRE: arcade.color.GOLD
         }
         super().__init__(20, colors[powerup_type])
         self.lifetime = 300
@@ -430,7 +419,7 @@ class TankGame(arcade.Window):
         self.explosion_list = None
         self.powerup_list = None
         self.particle_system = None
-        self.player_bullet_color = (255, 215, 0)  # Золотой
+        self.player_bullet_color = (255, 215, 0)
         self.player = None
         self.score = 0
         self.high_score = 0
@@ -438,6 +427,8 @@ class TankGame(arcade.Window):
         self.enemies_per_wave = 3
         self.enemies_to_spawn = 0
         self.game_state = GameState.MENU
+        self.difficulty = Difficulty.NORMAL
+        self.difficulty_selected = False
         self.left = False
         self.right = False
         self.up = False
@@ -448,10 +439,8 @@ class TankGame(arcade.Window):
         self.mouse_y = 0
         self.powerup_timer = 0
         self.load_high_score()
-        # Темный фон для контраста с яркими цветами
         arcade.set_background_color((30, 30, 30))
 
-        # Создаем папку для спрайтов если её нет
         if not os.path.exists("images"):
             os.makedirs("images")
             self.create_default_sprites()
@@ -459,39 +448,51 @@ class TankGame(arcade.Window):
         self.setup()
 
     def create_default_sprites(self):
-        """Создаем простые спрайты если файлов нет"""
-        import pygame
+        try:
+            import pygame
 
-        # Спрайт игрока (синий танк)
-        size = 64
-        surface = pygame.Surface((size, size), pygame.SRCALPHA)
-        pygame.draw.rect(surface, (0, 200, 255), (10, 10, 44, 44), border_radius=5)
-        pygame.draw.rect(surface, (0, 150, 220), (22, 40, 20, 20))
-        pygame.draw.rect(surface, (0, 100, 180), (15, 15, 34, 30), border_radius=3)
-        arcade.save_png(arcade.pyglet_to_arcade_texture(surface), "images/player_tank.png")
+            size = 64
+            # Спрайт игрока (синий танк)
+            surface = pygame.Surface((size, size), pygame.SRCALPHA)
+            pygame.draw.rect(surface, (0, 200, 255), (10, 10, 44, 44), border_radius=5)
+            pygame.draw.rect(surface, (0, 150, 220), (22, 40, 20, 20))
+            pygame.draw.rect(surface, (0, 100, 180), (15, 15, 34, 30), border_radius=3)
+            arcade.save_png(arcade.pyglet_to_arcade_texture(surface), "images/player_tank.png")
 
-        # Обычный враг (оранжевый)
-        surface = pygame.Surface((size, size), pygame.SRCALPHA)
-        pygame.draw.rect(surface, (255, 140, 0), (10, 10, 44, 44), border_radius=5)
-        pygame.draw.rect(surface, (220, 100, 0), (22, 40, 20, 20))
-        pygame.draw.rect(surface, (200, 80, 0), (15, 15, 34, 30), border_radius=3)
-        arcade.save_png(arcade.pyglet_to_arcade_texture(surface), "images/enemy_normal.png")
+            # Обычный враг (оранжевый)
+            surface = pygame.Surface((size, size), pygame.SRCALPHA)
+            pygame.draw.rect(surface, (255, 140, 0), (10, 10, 44, 44), border_radius=5)
+            pygame.draw.rect(surface, (220, 100, 0), (22, 40, 20, 20))
+            pygame.draw.rect(surface, (200, 80, 0), (15, 15, 34, 30), border_radius=3)
+            arcade.save_png(arcade.pyglet_to_arcade_texture(surface), "images/enemy_normal.png")
 
-        # Быстрый враг (зеленый)
-        surface = pygame.Surface((size, size), pygame.SRCALPHA)
-        pygame.draw.rect(surface, (50, 205, 50), (8, 8, 48, 48), border_radius=5)
-        pygame.draw.rect(surface, (30, 180, 30), (20, 38, 24, 24))
-        pygame.draw.rect(surface, (20, 160, 20), (13, 13, 38, 34), border_radius=3)
-        arcade.save_png(arcade.pyglet_to_arcade_texture(surface), "images/enemy_fast.png")
+            # Быстрый враг (зеленый)
+            surface = pygame.Surface((size, size), pygame.SRCALPHA)
+            pygame.draw.rect(surface, (50, 205, 50), (8, 8, 48, 48), border_radius=5)
+            pygame.draw.rect(surface, (30, 180, 30), (20, 38, 24, 24))
+            pygame.draw.rect(surface, (20, 160, 20), (13, 13, 38, 34), border_radius=3)
+            arcade.save_png(arcade.pyglet_to_arcade_texture(surface), "images/enemy_fast.png")
 
-        # Тяжелый враг (фиолетовый)
-        surface = pygame.Surface((size, size), pygame.SRCALPHA)
-        pygame.draw.rect(surface, (138, 43, 226), (5, 5, 54, 54), border_radius=7)
-        pygame.draw.rect(surface, (100, 20, 200), (24, 44, 16, 16))
-        pygame.draw.rect(surface, (80, 10, 180), (10, 10, 44, 40), border_radius=5)
-        arcade.save_png(arcade.pyglet_to_arcade_texture(surface), "images/enemy_heavy.png")
+            # Тяжелый враг (фиолетовый)
+            surface = pygame.Surface((size, size), pygame.SRCALPHA)
+            pygame.draw.rect(surface, (138, 43, 226), (5, 5, 54, 54), border_radius=7)
+            pygame.draw.rect(surface, (100, 20, 200), (24, 44, 16, 16))
+            pygame.draw.rect(surface, (80, 10, 180), (10, 10, 44, 40), border_radius=5)
+            arcade.save_png(arcade.pyglet_to_arcade_texture(surface), "images/enemy_heavy.png")
 
-        pygame.quit()
+        except ImportError:
+            # Если pygame не установлен, создаем простые текстуры
+            texture = arcade.make_soft_square_texture(64, (0, 200, 255), 255, 255)
+            arcade.save_png(texture, "images/player_tank.png")
+
+            texture = arcade.make_soft_square_texture(64, (255, 140, 0), 255, 255)
+            arcade.save_png(texture, "images/enemy_normal.png")
+
+            texture = arcade.make_soft_square_texture(64, (50, 205, 50), 255, 255)
+            arcade.save_png(texture, "images/enemy_fast.png")
+
+            texture = arcade.make_soft_square_texture(64, (138, 43, 226), 255, 255)
+            arcade.save_png(texture, "images/enemy_heavy.png")
 
     def load_high_score(self):
         try:
@@ -517,7 +518,7 @@ class TankGame(arcade.Window):
         self.powerup_list = arcade.SpriteList()
         self.particle_system = ParticleSystem()
 
-        self.player = PlayerTank()  # Игрок с спрайтом
+        self.player = PlayerTank(self.difficulty)
         self.player.center_x = SCREEN_WIDTH // 2
         self.player.center_y = 100
         self.player_list.append(self.player)
@@ -529,10 +530,10 @@ class TankGame(arcade.Window):
         self.spawn_wave()
 
     def create_obstacles(self):
-        # НЕРАЗРУШАЕМЫЕ ПРЕПЯТСТВИЯ - стальные серые
+        # НЕРАЗРУШАЕМЫЕ ПРЕПЯТСТВИЯ
         for x in range(50, SCREEN_WIDTH - 50, 60):
             for y in [50, SCREEN_HEIGHT - 50]:
-                obstacle = Obstacle(60, 60, (169, 169, 169))  # Стальной серый
+                obstacle = Obstacle(60, 60, (169, 169, 169))
                 obstacle.center_x = x
                 obstacle.center_y = y
                 obstacle.is_destructible = False
@@ -540,15 +541,15 @@ class TankGame(arcade.Window):
 
         for y in range(110, SCREEN_HEIGHT - 110, 60):
             for x in [50, SCREEN_WIDTH - 50]:
-                obstacle = Obstacle(60, 60, (169, 169, 169))  # Стальной серый
+                obstacle = Obstacle(60, 60, (169, 169, 169))
                 obstacle.center_x = x
                 obstacle.center_y = y
                 obstacle.is_destructible = False
                 self.obstacle_list.append(obstacle)
 
-        # РАЗРУШАЕМЫЕ ПРЕПЯТСТВИЯ - кирпичный красный
+        # РАЗРУШАЕМЫЕ ПРЕПЯТСТВИЯ
         for _ in range(8):
-            obstacle = Obstacle(60, 60, (178, 34, 34))  # Кирпично-красный
+            obstacle = Obstacle(60, 60, (178, 34, 34))
             obstacle.is_destructible = True
             while True:
                 x = random.randint(100, SCREEN_WIDTH - 100)
@@ -681,9 +682,10 @@ class TankGame(arcade.Window):
             arcade.color.WHITE, 20, anchor_x="right"
         )
 
-        ammo_text = "Патроны: ∞"
+        difficulty_text = f"Сложность: {self.difficulty.value}"
         arcade.draw_text(
-            ammo_text, 10, SCREEN_HEIGHT - 150, arcade.color.LIME_GREEN, 20
+            difficulty_text, SCREEN_WIDTH - 10, SCREEN_HEIGHT - 60,
+            arcade.color.WHITE, 16, anchor_x="right"
         )
 
         control_text = "WASD - движение, ЛКМ/ПРОБЕЛ - стрельба"
@@ -694,9 +696,24 @@ class TankGame(arcade.Window):
 
         pause_text = "P - пауза"
         arcade.draw_text(
-            pause_text, SCREEN_WIDTH - 10, SCREEN_HEIGHT - 60,
+            pause_text, SCREEN_WIDTH - 10, SCREEN_HEIGHT - 90,
             arcade.color.LIGHT_GRAY, 16, anchor_x="right"
         )
+
+        # Индикаторы улучшений
+        if self.player.speed_multiplier > 1.0:
+            arcade.draw_text(
+                "⚡", self.player.center_x,
+                self.player.center_y + 50,
+                arcade.color.YELLOW, 20, anchor_x="center"
+            )
+
+        if self.player.damage_multiplier > 1.0:
+            arcade.draw_text(
+                "⚔️", self.player.center_x + 20,
+                      self.player.center_y + 50,
+                arcade.color.RED, 20, anchor_x="center"
+            )
 
     def draw_menu(self):
         arcade.draw_lrbt_rectangle_filled(
@@ -704,31 +721,60 @@ class TankGame(arcade.Window):
         )
 
         arcade.draw_text(
-            "ТАНЧИКИ", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 100,
+            "ТАНЧИКИ", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 150,
             arcade.color.CYAN, 60, anchor_x="center", bold=True
         )
 
-        start_text = "Нажмите ПРОБЕЛ для начала игры"
-        arcade.draw_text(
-            start_text, SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2,
-            arcade.color.WHITE, 30, anchor_x="center"
-        )
+        if not self.difficulty_selected:
+            arcade.draw_text(
+                "ВЫБЕРИТЕ СЛОЖНОСТЬ", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 80,
+                arcade.color.WHITE, 35, anchor_x="center"
+            )
+
+            arcade.draw_text(
+                "1 - ЛЕГКО", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 20,
+                arcade.color.GREEN if self.difficulty == Difficulty.EASY else arcade.color.LIGHT_GRAY,
+                30, anchor_x="center"
+            )
+
+            arcade.draw_text(
+                "2 - НОРМАЛЬНО", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 30,
+                arcade.color.YELLOW if self.difficulty == Difficulty.NORMAL else arcade.color.LIGHT_GRAY,
+                30, anchor_x="center"
+            )
+
+            arcade.draw_text(
+                "3 - СЛОЖНО", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 80,
+                arcade.color.RED if self.difficulty == Difficulty.HARD else arcade.color.LIGHT_GRAY,
+                30, anchor_x="center"
+            )
+
+            arcade.draw_text(
+                "Нажмите ENTER для начала игры", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 150,
+                arcade.color.WHITE, 25, anchor_x="center"
+            )
+        else:
+            start_text = "Нажмите ПРОБЕЛ для начала игры"
+            arcade.draw_text(
+                start_text, SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 40,
+                arcade.color.WHITE, 30, anchor_x="center"
+            )
 
         controls_text = "Управление: WASD - движение, ЛКМ/ПРОБЕЛ - стрельба"
         arcade.draw_text(
-            controls_text, SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 50,
+            controls_text, SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 100,
             arcade.color.LIGHT_GRAY, 20, anchor_x="center"
         )
 
         high_score_text = f"Текущий рекорд: {self.high_score}"
         arcade.draw_text(
-            high_score_text, SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 100,
+            high_score_text, SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 140,
             arcade.color.GOLD, 25, anchor_x="center"
         )
 
         quit_text = "ESC - выход из игры"
         arcade.draw_text(
-            quit_text, SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 150,
+            quit_text, SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 180,
             arcade.color.WHITE, 20, anchor_x="center"
         )
 
@@ -868,25 +914,25 @@ class TankGame(arcade.Window):
                 self.particle_system.create_trail(
                     self.player.center_x + 20,
                     self.player.center_y,
-                    (0, 255, 255)  # Циановый цвет игрока
+                    (0, 255, 255)
                 )
             if self.right:
                 self.particle_system.create_trail(
                     self.player.center_x - 20,
                     self.player.center_y,
-                    (0, 255, 255)  # Циановый цвет игрока
+                    (0, 255, 255)
                 )
             if self.up:
                 self.particle_system.create_trail(
                     self.player.center_x,
                     self.player.center_y - 20,
-                    (0, 255, 255)  # Циановый цвет игрока
+                    (0, 255, 255)
                 )
             if self.down:
                 self.particle_system.create_trail(
                     self.player.center_x,
                     self.player.center_y + 20,
-                    (0, 255, 255)  # Циановый цвет игрока
+                    (0, 255, 255)
                 )
 
             self.player.center_x = max(
@@ -998,8 +1044,17 @@ class TankGame(arcade.Window):
 
     def on_key_press(self, key, modifiers):
         if self.game_state == GameState.MENU:
-            if key == arcade.key.SPACE:
+            if key == arcade.key.ENTER and not self.difficulty_selected:
+                self.difficulty_selected = True
+            elif key == arcade.key.KEY_1:
+                self.difficulty = Difficulty.EASY
+            elif key == arcade.key.KEY_2:
+                self.difficulty = Difficulty.NORMAL
+            elif key == arcade.key.KEY_3:
+                self.difficulty = Difficulty.HARD
+            elif key == arcade.key.SPACE and self.difficulty_selected:
                 self.game_state = GameState.PLAYING
+                self.setup()
             elif key == arcade.key.ESCAPE:
                 arcade.close_window()
             return
@@ -1010,6 +1065,7 @@ class TankGame(arcade.Window):
                 self.setup()
             elif key == arcade.key.ESCAPE:
                 self.game_state = GameState.MENU
+                self.difficulty_selected = False
             return
 
         if self.game_state == GameState.PAUSED:
@@ -1017,6 +1073,7 @@ class TankGame(arcade.Window):
                 self.game_state = GameState.PLAYING
             elif key == arcade.key.ESCAPE:
                 self.game_state = GameState.MENU
+                self.difficulty_selected = False
             return
 
         if key == arcade.key.P:
